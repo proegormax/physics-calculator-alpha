@@ -9,11 +9,27 @@
     body{background:#f7f7f7}
     .card{max-width:900px;margin:1rem auto}
   </style>
+
+  <!-- Адрес твоего бэкенда на Render -->
+  <script>
+    window.API_BASE = "https://physics-calculator-alpha.onrender.com";
+  </script>
+
+  <!-- ВЕСЬ JS — здесь -->
   <script>
     async function postJson(url, data){
-      const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const res = await fetch(window.API_BASE + url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if(!res.ok){
+        const text = await res.text().catch(()=> '');
+        throw new Error(`HTTP ${res.status} ${res.statusText} ${text}`);
+      }
       return await res.json();
     }
+
     function toCelsiusFromInputs(){
       const c = document.getElementById('celsius').value.trim();
       const k = document.getElementById('kelvin').value.trim();
@@ -23,43 +39,57 @@
       if(f !== '') return (parseFloat(f) - 32) / 1.8;
       return null;
     }
+
     function updateTemps(c){
       if(Number.isFinite(c)){
-        document.getElementById('celsius').value = (Math.round(c*10)/10).toFixed(1);
-        document.getElementById('kelvin').value = (Math.round((c+273.15)*10)/10).toFixed(1);
+        document.getElementById('celsius').value    = (Math.round(c*10)/10).toFixed(1);
+        document.getElementById('kelvin').value     = (Math.round((c+273.15)*10)/10).toFixed(1);
         document.getElementById('fahrenheit').value = (Math.round((c*1.8+32)*10)/10).toFixed(1);
       }
     }
+
     function countFilled(){
       const fields = ['celsius','kelvin','fahrenheit','resistance'];
       return fields.reduce((acc,id)=>acc + (document.getElementById(id).value.trim()!==''?1:0),0);
     }
+
     async function calculateAll(e){
       e.preventDefault();
       const filled = countFilled();
       if(filled===0){ alert('Заполните одно поле температуры или сопротивление'); return; }
       if(filled>1){ alert('Заполните только одно поле'); return; }
+
       const type = document.getElementById('type').value;
-      const r0 = parseFloat(document.getElementById('r0').value);
+      const r0   = parseFloat(document.getElementById('r0').value);
       const rVal = document.getElementById('resistance').value.trim();
-      if(rVal!==''){
-        const r = parseFloat(rVal);
-        const resp = await postJson('/api/rtd/temperature', {type, resistance:r, r0});
+
+      try {
+        if(rVal!==''){
+          const r = parseFloat(rVal);
+          const resp = await postJson('/api/rtd/temperature', {type, resistance: r, r0});
+          if(resp.result==='SUCCESS'){
+            updateTemps(resp.data.celsius);
+            document.getElementById('resistance').value = r.toFixed(1);
+          } else {
+            alert(resp.message);
+          }
+          return;
+        }
+
+        const tc = toCelsiusFromInputs();
+        const resp = await postJson('/api/rtd/resistance', {type, temperatureCelsius: tc, r0});
         if(resp.result==='SUCCESS'){
-          updateTemps(resp.data.celsius);
-          document.getElementById('resistance').value = r.toFixed(1);
-        }else{ alert(resp.message); }
-        return;
+          document.getElementById('resistance').value = resp.data.resistanceOhm.toFixed(1);
+          updateTemps(tc);
+        } else {
+          alert(resp.message);
+        }
+      } catch (err){
+        alert('Ошибка запроса: ' + err.message);
       }
-      const tc = toCelsiusFromInputs();
-      const resp = await postJson('/api/rtd/resistance', {type, temperatureCelsius: tc, r0});
-      if(resp.result==='SUCCESS'){
-        document.getElementById('resistance').value = resp.data.resistanceOhm.toFixed(1);
-        updateTemps(tc);
-      }else{ alert(resp.message); }
     }
   </script>
-  </head>
+</head>
 <body>
 <div class="card shadow-sm">
   <div class="card-body">
@@ -99,8 +129,6 @@
       </div>
     </form>
   </div>
- </div>
+</div>
 </body>
 </html>
-
-
