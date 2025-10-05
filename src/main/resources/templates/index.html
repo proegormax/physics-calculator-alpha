@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Калькулятор термометров сопротивления</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <style>
+    body{background:#f7f7f7}
+    .card{max-width:900px;margin:1rem auto}
+  </style>
+  <script>
+    async function postJson(url, data){
+      const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      return await res.json();
+    }
+    function toCelsiusFromInputs(){
+      const c = document.getElementById('celsius').value.trim();
+      const k = document.getElementById('kelvin').value.trim();
+      const f = document.getElementById('fahrenheit').value.trim();
+      if(c !== '') return parseFloat(c);
+      if(k !== '') return parseFloat(k) - 273.15;
+      if(f !== '') return (parseFloat(f) - 32) / 1.8;
+      return null;
+    }
+    function updateTemps(c){
+      if(Number.isFinite(c)){
+        document.getElementById('celsius').value = (Math.round(c*10)/10).toFixed(1);
+        document.getElementById('kelvin').value = (Math.round((c+273.15)*10)/10).toFixed(1);
+        document.getElementById('fahrenheit').value = (Math.round((c*1.8+32)*10)/10).toFixed(1);
+      }
+    }
+    function countFilled(){
+      const fields = ['celsius','kelvin','fahrenheit','resistance'];
+      return fields.reduce((acc,id)=>acc + (document.getElementById(id).value.trim()!==''?1:0),0);
+    }
+    async function calculateAll(e){
+      e.preventDefault();
+      const filled = countFilled();
+      if(filled===0){ alert('Заполните одно поле температуры или сопротивление'); return; }
+      if(filled>1){ alert('Заполните только одно поле'); return; }
+      const type = document.getElementById('type').value;
+      const r0 = parseFloat(document.getElementById('r0').value);
+      const rVal = document.getElementById('resistance').value.trim();
+      if(rVal!==''){
+        const r = parseFloat(rVal);
+        const resp = await postJson('/api/rtd/temperature', {type, resistance:r, r0});
+        if(resp.result==='SUCCESS'){
+          updateTemps(resp.data.celsius);
+          document.getElementById('resistance').value = r.toFixed(1);
+        }else{ alert(resp.message); }
+        return;
+      }
+      const tc = toCelsiusFromInputs();
+      const resp = await postJson('/api/rtd/resistance', {type, temperatureCelsius: tc, r0});
+      if(resp.result==='SUCCESS'){
+        document.getElementById('resistance').value = resp.data.resistanceOhm.toFixed(1);
+        updateTemps(tc);
+      }else{ alert(resp.message); }
+    }
+  </script>
+  </head>
+<body>
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h3 class="text-center mb-4">Калькулятор термометров сопротивления</h3>
+    <form class="row g-3" onsubmit="return false;">
+      <div class="col-12 col-md-6">
+        <label class="form-label">Тип датчика</label>
+        <select id="type" class="form-select">
+          <option value="PT385">PT385</option>
+          <option value="PT391">PT391</option>
+          <option value="CU">CU</option>
+          <option value="NI">NI</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">R0, Ом</label>
+        <input id="r0" type="number" class="form-control" value="100">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Температура, °C</label>
+        <input id="celsius" type="number" class="form-control" value="25">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Температура, K</label>
+        <input id="kelvin" type="number" class="form-control">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Температура, °F</label>
+        <input id="fahrenheit" type="number" class="form-control">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Сопротивление, Ом</label>
+        <input id="resistance" type="number" class="form-control" placeholder="Заполните или температуру, или сопротивление">
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary flex-fill" onclick="calculateAll(event)">Рассчитать</button>
+      </div>
+    </form>
+  </div>
+ </div>
+</body>
+</html>
+
+
